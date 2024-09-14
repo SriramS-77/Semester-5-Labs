@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 
 def fast(img_path, threshold=20):
     img = cv2.imread(img_path)
@@ -34,9 +33,8 @@ def fast(img_path, threshold=20):
 
     img[c == 255] = [0, 0, 255]
 
-    plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    plt.title('FAST Corner Detection')
-    plt.axis('off')
-    plt.show()
+    cv2.imshow('Output', img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-fast('Untitled.jpeg')
+fast('Res/chess.webp', threshold=100)

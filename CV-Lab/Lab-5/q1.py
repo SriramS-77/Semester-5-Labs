@@ -1,9 +1,10 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 
 def harris(image_path, k=0.04, th=1e-6):
     image = cv2.imread(image_path)
+    cv2.imshow('Input', image)
+    cv2.waitKey(0)
     gr = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     gr = np.float32(gr)
@@ -32,10 +33,16 @@ def harris(image_path, k=0.04, th=1e-6):
 
     corners = res > th * res.max()
     image[corners] = [0, 0, 255]
+    cv2.imshow('Output', image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
+harris('Res/chess.webp')
+
+
+"""
     plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     plt.title('Harris Corner Detection')
     plt.axis('off')
     plt.show()
-
-harris('Untitled.jpeg')
+"""

@@ -1,69 +1,102 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+from math import sqrt
 
-def compute_dp(img, nsc, k=1.2):
-    py = [img]
-    sigma = 1.0  # Initial sigma
-    for _ in range(nsc - 1):
-        sigma *= k
-        img_blurred = cv2.GaussianBlur(img, (0, 0), sigma)
-        py.append(img_blurred)
+def compute_dp(img, octaves_n=3, frames_n=5, k=sqrt(2)):
+    img = img.astype('float64')
+    img /= 255
+    cv2.imshow('Input', img)
+    cv2.waitKey(0)
+    octave_lst = []
+    for octave_i in range(octaves_n):
+        octave = []
+        sigma = sqrt(2) / 2 * 2 ** octave_i   # Initial sigma
+        for frame_i in range(frames_n):
+            img_blurred = cv2.GaussianBlur(img, (11, 11), sigma)
+            octave.append(img_blurred)
+            sigma *= k
 
-    dp = [py[i+1] - py[i] for i in range(len(py) - 1)]
+        octave_lst.append(octave)
+
+    dp = [[octave_lst[j][i+1] - octave_lst[j][i] for i in range(len(octave_lst[j]) - 1)] for j in range(len(octave_lst))]
+    dp = np.array(dp)
+    print(dp.shape)
+    #for i in dp:
+    #    for j in i:
+    #        cv2.imshow('Input', j)
+    #        cv2.waitKey(0)
     return dp
 
 def detect_kp(dp, thrs=0.03):
     kp = []
-    for i, dog in enumerate(dp):
-        mask = np.abs(dog) > thrs * np.max(np.abs(dog))
-        kp.extend([(i, x, y) for x, y in zip(*np.nonzero(mask))])
+    for oct_i in range(dp.shape[0]):
+        for i in range(1, dp.shape[2]-1):
+            for j in range(1, dp.shape[3]-1):
+                patch = dp[oct_i, :, i-1: i+2, j-1: j+2]
+                # print(patch.shape)
+                if np.max(patch) < thrs:
+                    continue
+
+                patch = np.max(patch, axis=1)
+                patch = np.max(patch, axis=1)
+                idx = np.argmax(patch)
+
+                sigma = sqrt(2) / 2 * (2 ** oct_i) * sqrt(2) ** idx
+                kp.append([sigma, i, j])
+    print(len(kp))
     return kp
 
-def extract(img, kp, ps=16):
-    descs = []
-    half = ps // 2
+def eliminate_edges(img, kp):
+    k = 0.04
+    th = 1e-6
+    true_kp = []
+    sobel_x = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
+    Dxx, Dxy, Dyy = 0, 0, 0
+    window_size = 7
+    for sigma, x, y in kp:
+        for i in range(x - window_size//2, x + window_size//2 + 1):
+            for j in range(y - window_size // 2, y + window_size // 2 + 1):
+                Dx, Dy = sobel_x[x][y], sobel_y[x][y]
+                Dxx += Dx ** 2
+                Dxy += Dx * Dy
+                Dyy += Dy ** 2
+        Dxx, Dxy, Dyy = Dxx / window_size ** 2, Dxy / window_size ** 2, Dyy / window_size ** 2
+        h_mat = np.array([[Dxx, Dxy],
+                          [Dxy, Dyy]])
 
-    for si, x, y in kp:
-        sc = 1.2 ** si
-        patch = img[max(0, int(x - half)):int(x + half),
-                      max(0, int(y - half)):int(y + half)]
-
-        if patch.shape[0] < ps or patch.shape[1] < ps:
-            continue
-
-        patch = cv2.resize(patch, (ps, ps))
-        patch = patch.astype(np.float32)
-        desc = patch.flatten()
-        desc /= np.linalg.norm(desc)
-        descs.append(desc)
-
-    return np.array(descs)
+        det = np.linalg.det(h_mat)
+        trace = np.trace(h_mat)
+        res = det - k * (trace ** 2)
+        if res > 10:
+            true_kp.append([sigma, x, y])
+    return true_kp
 
 def draw_keypoints(img, kp):
     img_kp = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     for si, x, y in kp:
-        cv2.circle(img_kp, (int(y), int(x)), 4, (0, 255, 0), -1)
-        cv2.putText(img_kp, f'{si}', (int(y), int(x) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
+        cv2.circle(img_kp, (int(y), int(x)), 2, (0, 255, 0), 1)
+        # cv2.putText(img_kp, f'{si}', (int(y), int(x) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
     return img_kp
 
-def main():
-    img_path = 'Untitled.jpeg'
-    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
 
-    dp = compute_dp(img, nsc=3)
-    kp = detect_kp(dp)
+img_path = 'Res/people.webp'
+img = cv2.imread(img_path)
+cv2.imshow('Input', img)
+cv2.waitKey(0)
 
-    dc = extract(img, kp)
+img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    img_kp = draw_keypoints(img, kp)
+dp = compute_dp(img)
 
-    plt.imshow(cv2.cvtColor(img_kp, cv2.COLOR_BGR2RGB))
-    plt.title('Keypoints detected manually')
-    plt.axis('off')
-    plt.show()
+kp = detect_kp(dp)
 
-    print(f"Custom Descriptors: {dc.shape}")
+kp = eliminate_edges(img, kp)
 
-if __name__ == "__main__":
-    main()
+img_kp = draw_keypoints(img, kp)
+
+cv2.imshow('Output', img_kp)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+print(f"Custom Descriptors: {dp.shape}")
