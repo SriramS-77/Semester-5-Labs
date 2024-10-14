@@ -43,7 +43,6 @@ def detect_kp(dp, thrs=0.03):
 
                 sigma = sqrt(2) / 2 * (2 ** oct_i) * sqrt(2) ** idx
                 kp.append([sigma, i, j])
-    print(len(kp))
     return kp
 
 def eliminate_edges(img, kp):
@@ -92,7 +91,7 @@ dp = compute_dp(img)
 kp = detect_kp(dp)
 
 kp = eliminate_edges(img, kp)
-
+print(len(kp))
 img_kp = draw_keypoints(img, kp)
 
 cv2.imshow('Output', img_kp)
